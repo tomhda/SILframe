@@ -89,8 +89,8 @@ silframe-cli export talk.mp4 --start 5:00 --end 9:30 --copy --out part.mkv
   `--crop`, `--rotate`, `--zoom`, `--speed`, or more than one `--segment`, because those change
   the picture or the timing and so need re-encoding.
 - Check: exit code 0, `"ok": true`, and `media` in the result, which is read back from the written
-  file. Compare `media.durationSeconds` with `requestedDurationSeconds` (already divided by
-  `--speed`), and `media.displayWidth` / `displayHeight` with the size you expect.
+  file. Compare `media.durationSeconds` with `requestedDurationSeconds`, which is the length of
+  the ranges in the source (with `--speed 2`, the file is half of it), and `media.displayWidth` / `displayHeight` with the size you expect.
   A re-encoded file can report a few hundredths of a second more than requested, because the
   audio track ends slightly after the last video frame.
   With `--copy`, `boundariesAreApproximate` is `true` and the duration can differ by a few seconds.

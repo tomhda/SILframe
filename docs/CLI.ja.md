@@ -118,7 +118,7 @@ silframe-cli export talk.mp4 --start 5:00 --end 9:30 --copy --out part.mkv
 }
 ```
 
-`media` は書き出したファイルの情報で、項目は `info` と同じです。`--copy` を付けた場合、`mode` は `"copy"`、`boundariesAreApproximate` は `true` になります。
+`requestedDurationSeconds` は、指定した区間の元の動画での長さです。`--speed` を付けた場合、書き出したファイルの長さはこれを倍率で割った値になります。`media` は書き出したファイルの情報で、項目は `info` と同じです。`--copy` を付けた場合、`mode` は `"copy"`、`boundariesAreApproximate` は `true` になります。
 
 実行中は、`encoding 42%` のような進捗が stderr に出ます。stdout に出るのは最後の JSON だけです。
 

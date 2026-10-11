@@ -118,7 +118,7 @@ silframe-cli export talk.mp4 --start 5:00 --end 9:30 --copy --out part.mkv
 }
 ```
 
-`media` describes the file that was written, with the same fields as `info`. With `--copy`, `mode` is `"copy"` and `boundariesAreApproximate` is `true`.
+`requestedDurationSeconds` is the length of the requested ranges in the source video; with `--speed`, the written file is that divided by the factor. `media` describes the file that was written, with the same fields as `info`. With `--copy`, `mode` is `"copy"` and `boundariesAreApproximate` is `true`.
 
 While it runs, progress lines such as `encoding 42%` go to stderr. Stdout carries only the final JSON.
 
