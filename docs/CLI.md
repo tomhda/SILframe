@@ -62,10 +62,10 @@ Saves one frame as a PNG.
 
 | Option | Meaning |
 |---|---|
-| `--time <time>` | Position of the frame. Required. |
+| `--time <time>` | Position of the frame. Required. The first frame at or after it is saved. |
 | `--out <file.png>` | Where to save. Default: next to the video, named after the video and the time. |
-| `--crop X,Y,W,H` | Rectangle in pixels of the displayed picture, from the top-left corner. |
-| `--rotate 90\|180\|270` | Clockwise rotation. |
+| `--crop X,Y,W,H` | Rectangle in pixels of the displayed picture, from the top-left corner. All four numbers must be even. |
+| `--rotate 90\|180\|270` | Clockwise rotation, applied after the crop: with 90 or 270, a `W` by `H` crop is saved as `H` by `W` pixels. |
 | `--zoom F[,FX,FY]` | Magnify 1 to 4 times around a focus point. The focus is 0 to 1 across and down; the default is the center. |
 | `--overwrite` | Replace `--out` if it exists. |
 
@@ -77,9 +77,13 @@ silframe-cli frame talk.mp4 --time 1:23.5 --out slide.png
 {
   "ok": true,
   "output": "C:\\videos\\slide.png",
-  "timeSeconds": 83.5
+  "timeSeconds": 83.5,
+  "width": 1920,
+  "height": 1080
 }
 ```
+
+`width` and `height` are the size of the saved PNG, read back from the file.
 
 ### export
 
@@ -90,9 +94,9 @@ Writes a clip. The extension of `--out` selects MP4, MKV, or MOV. Re-encoded out
 | `--out <file>` | Where to save. Required. |
 | `--start <time>` | Default: 0. |
 | `--end <time>` | Default: the end of the video. |
-| `--segment START-END` | Repeat to join several ranges into one file, in the order given. Replaces `--start` and `--end`. |
+| `--segment START-END` | Repeat to join several ranges into one file. Give them from the earliest to the latest, without overlap; they can't be reordered. Replaces `--start` and `--end`. |
 | `--crop`, `--rotate`, `--zoom` | As for `frame`. Applied to every segment. |
-| `--speed <factor>` | 0.5 to 4. Default: 1. |
+| `--speed <factor>` | 0.25 to 4. Default: 1. |
 | `--copy` | Cut without re-encoding. Fast and lossless, but the cut points move to nearby keyframes. Cannot be combined with crop, rotate, zoom, speed, or several segments. |
 | `--overwrite` | Replace `--out` if it exists. |
 | `--quiet` | No progress on stderr. |
@@ -117,6 +121,8 @@ silframe-cli export talk.mp4 --start 5:00 --end 9:30 --copy --out part.mkv
 `media` describes the file that was written, with the same fields as `info`. With `--copy`, `mode` is `"copy"` and `boundariesAreApproximate` is `true`.
 
 While it runs, progress lines such as `encoding 42%` go to stderr. Stdout carries only the final JSON.
+
+The output is always JSON. `--json` is accepted for any command and changes nothing.
 
 ## Results and errors
 

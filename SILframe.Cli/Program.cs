@@ -74,11 +74,11 @@ internal static class Program
         }
         catch (ExportValidationException exception)
         {
-            return Fail("invalid_request", exception.UserMessage, exception.Diagnostic, ExitFailed);
+            return Fail("invalid_request", ToCommandLineWording(exception.UserMessage), exception.Diagnostic, ExitFailed);
         }
         catch (ExportException exception)
         {
-            return Fail("failed", exception.UserMessage, exception.Diagnostic, ExitFailed);
+            return Fail("failed", ToCommandLineWording(exception.UserMessage), exception.Diagnostic, ExitFailed);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -129,7 +129,8 @@ internal static class Program
             focusX,
             focusY,
             cancellationToken);
-        return Print(new { ok = true, output = saved, timeSeconds = time });
+        var (width, height) = ReadPngSize(saved);
+        return Print(new { ok = true, output = saved, timeSeconds = time, width, height });
     }
 
     private static async Task<int> ExportAsync(Arguments arguments, CancellationToken cancellationToken)
@@ -153,6 +154,20 @@ internal static class Program
         var mode = arguments.Has("copy") ? ExportMode.StreamCopyApproximate : ExportMode.AccurateReencode;
 
         var segmentTexts = arguments.GetAll("segment");
+        if (arguments.Has("copy"))
+        {
+            var conflicts = new[] { "crop", "rotate", "zoom", "speed" }.Where(arguments.Has).Select(name => $"--{name}").ToList();
+            if (segmentTexts.Count > 1)
+            {
+                conflicts.Add("several --segment ranges");
+            }
+
+            if (conflicts.Count > 0)
+            {
+                throw new UsageException(
+                    $"--copy can't be combined with {string.Join(", ", conflicts)}. Remove --copy to re-encode, or remove the other options to cut without re-encoding.");
+            }
+        }
         double start;
         double end;
         List<ExportSegment>? segments = null;
@@ -255,6 +270,17 @@ internal static class Program
         }
 
         File.Delete(output);
+    }
+
+    // Width and height are big-endian integers at bytes 16 and 20 of a PNG.
+    private static (int Width, int Height) ReadPngSize(string path)
+    {
+        Span<byte> header = stackalloc byte[24];
+        using var stream = File.OpenRead(path);
+        stream.ReadExactly(header);
+        return (
+            System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[16..]),
+            System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[20..]));
     }
 
     private static double ParseTime(string text, string option)
@@ -368,6 +394,15 @@ internal static class Program
         return ExitOk;
     }
 
+    // The messages come from the code the app shares, which names the check
+    // box in the editing panel. Here the same setting is the --copy option.
+    private static string ToCommandLineWording(string message) => message
+        .Replace("Turn off \"Fast cut (original quality)\"", "Remove --copy")
+        .Replace("Select \"Fast cut (original quality)\"", "Add --copy")
+        .Replace("\"Fast cut (original quality)\"", "--copy")
+        .Replace("Fast cut failed", "The --copy export failed")
+        .Replace("The fast-cut video", "The --copy output");
+
     private static int Fail(string code, string message, string? detail, int exitCode)
     {
         Console.Out.WriteLine(JsonSerializer.Serialize(new { ok = false, error = new { code, message, detail } }, JsonOptions));
@@ -386,6 +421,7 @@ internal static class Program
         Every command prints one JSON object on stdout: {"ok": true, ...} on success,
         {"ok": false, "error": {"code", "message", "detail"}} on failure.
         Exit code: 0 success, 1 failed, 2 wrong usage. Export progress goes to stderr.
+        The output is always JSON; --json is accepted and changes nothing.
 
         Times are seconds (12.5), m:ss (1:02.5), or h:mm:ss, measured from the start of the video.
 
@@ -393,9 +429,9 @@ internal static class Program
           Prints duration, size, frame rate, codecs, and track counts.
 
         frame
-          --time <time>          Position of the frame. Required.
+          --time <time>          Position of the frame. Required. The first frame at or after it is saved.
           --out <file.png>       Default: next to the video, named after it and the time.
-          --crop X,Y,W,H         Rectangle in pixels of the displayed picture.
+          --crop X,Y,W,H         Rectangle in pixels of the displayed picture. Even numbers only.
           --rotate 90|180|270    Clockwise.
           --zoom F[,FX,FY]       Magnify 1 to 4 times around a focus point (0 to 1, default 0.5,0.5).
           --overwrite            Replace --out if it exists.
@@ -404,9 +440,10 @@ internal static class Program
           --out <file>           Required. The extension selects MP4, MKV, or MOV.
           --start <time>         Default: 0.
           --end <time>           Default: the end of the video.
-          --segment START-END    Repeat to join several ranges into one file. Replaces --start/--end.
+          --segment START-END    Repeat to join several ranges into one file, earliest first, without overlap.
+                                 Replaces --start/--end.
           --crop, --rotate, --zoom   As for frame. Applied to every segment.
-          --speed <factor>       0.5 to 4. Default 1.
+          --speed <factor>       0.25 to 4. Default 1.
           --copy                 Cut without re-encoding. Fast and lossless, but the cut points move
                                  to nearby keyframes. Not with crop, rotate, zoom, speed, or several segments.
           --overwrite            Replace --out if it exists.
@@ -434,9 +471,10 @@ internal sealed class UsageException(string message) : Exception(message);
 
 internal sealed class Arguments
 {
-    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "copy", "overwrite", "quiet" };
+    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "copy", "overwrite", "quiet", "json" };
     private readonly Dictionary<string, List<string>> _options = new(StringComparer.Ordinal);
     private readonly List<string> _positional = new();
+    private readonly HashSet<string> _missingValue = new(StringComparer.Ordinal);
 
     public static Arguments Parse(string[] args)
     {
@@ -468,7 +506,9 @@ internal sealed class Arguments
             }
             else
             {
-                throw new UsageException($"--{name} needs a value.");
+                // Reported by AllowOnly, after it has rejected unknown options.
+                value = "";
+                result._missingValue.Add(name);
             }
 
             if (!result._options.TryGetValue(name, out var values))
@@ -486,10 +526,16 @@ internal sealed class Arguments
     {
         foreach (var name in _options.Keys)
         {
-            if (!names.Contains(name, StringComparer.Ordinal))
+            // The output is always JSON, so --json is accepted and changes nothing.
+            if (name != "json" && !names.Contains(name, StringComparer.Ordinal))
             {
                 throw new UsageException($"Unknown option --{name}.");
             }
+        }
+
+        if (_missingValue.Count > 0)
+        {
+            throw new UsageException($"--{_missingValue.First()} needs a value.");
         }
 
         foreach (var (name, values) in _options)
