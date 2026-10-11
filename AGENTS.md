@@ -147,6 +147,8 @@ HDR videos can't be re-encoded (`media.isHdr` is `true`); export them with `--co
 
 ## agent-friendly check record
 
+The criteria for the agent-friendly mark are in [tomhda/agent-friendly-mark](https://github.com/tomhda/agent-friendly-mark).
+
 2026-10-11 — Claude Opus 5.5 and Codex gpt-6.1-sol (high), each in a new conversation with only
 this repository and an installed SILframe 1.1.0. Tasks: read a video's properties, save a cropped
 frame, join two ranges into one file, and cut a range without re-encoding while rotating it
